@@ -194,6 +194,10 @@
   <button class="filebtn" id="fileBtn">index.html</button>
 </header>
 
+<div id="volBanner" style="display:none;background:rgba(242,121,92,.18);border-bottom:1px solid rgba(242,121,92,.5);color:#f8b09c;font-size:11px;line-height:1.6;padding:7px 14px">
+  ⚠ この環境ではブラウザ保存が使えないみたい（プライベートブラウズ中？ または 設定&gt;Safari&gt;「すべてのCookieをブロック」がオン？）。タブを閉じるとデータが消えるので、こまめに<b>コピー/DL</b>してね。
+</div>
+
 <div class="toolbar" id="toolbar"></div>
 
 <div class="editwrap">
@@ -309,9 +313,53 @@ function defaultState(){
     activeId:null, snippets:[]
   };
 }
+/* ---------- storage adapter ----------
+   Claudeアーティファクト内では window.storage、
+   GitHub PagesやNeocities上では localStorage を使う。
+   Safariのプライベートブラウズ等でlocalStorageが使えない場合は
+   メモリ退避(タブを閉じると消える)にフォールバック */
+const mem = {};
+let volatileMode = false;
+function localOK(){
+  try{
+    localStorage.setItem('__lapidary_test','1');
+    localStorage.removeItem('__lapidary_test');
+    return true;
+  }catch(e){ return false; }
+}
+const store = {
+  async get(k){
+    if(typeof window.storage !== 'undefined' && window.storage){
+      return window.storage.get(k);
+    }
+    if(localOK()){
+      const v = localStorage.getItem(k);
+      return v === null ? null : {key:k, value:v};
+    }
+    volatileMode = true;
+    return k in mem ? {key:k, value:mem[k]} : null;
+  },
+  async set(k, v){
+    if(typeof window.storage !== 'undefined' && window.storage){
+      return window.storage.set(k, v);
+    }
+    if(localOK()){
+      localStorage.setItem(k, v);
+      volatileMode = false;
+      return {key:k, value:v};
+    }
+    volatileMode = true;
+    mem[k] = v;   // タブを開いてる間だけ有効
+    return {key:k, value:v, volatile:true};
+  }
+};
+function updateBanner(){
+  $('volBanner').style.display = volatileMode ? 'block' : 'none';
+}
+
 async function loadState(){
   try{
-    const r = await window.storage.get(KEY);
+    const r = await store.get(KEY);
     if(r && r.value){ state = JSON.parse(r.value); }
   }catch(e){ /* first run */ }
   if(!state || !state.files || !state.files.length) state = defaultState();
@@ -320,8 +368,15 @@ async function loadState(){
 let saveTimer=null;
 async function doSave(manual){
   try{
-    const r = await window.storage.set(KEY, JSON.stringify(state));
+    const r = await store.set(KEY, JSON.stringify(state));
     if(!r) throw new Error('storage returned null');
+    updateBanner();
+    if(r.volatile){
+      // メモリ退避には成功(タブを閉じるまでは持つ)
+      $('saveBtn').classList.remove('dirty');
+      if(manual) toast('⚠ 一時保存のみ…下の注意を見てね');
+      return;
+    }
     $('saveBtn').classList.remove('dirty');
     if(manual) toast('保存したよ✨');
   }catch(e){
@@ -581,6 +636,7 @@ $('dlBtn').addEventListener('click', ()=>{
 /* ---------- init ---------- */
 (async ()=>{
   await loadState();
+  updateBanner();
   renderToolbar();
   openFile(state.activeId);
 })();
