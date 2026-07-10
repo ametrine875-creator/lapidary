@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>研磨台 Lapidary — HTML手打ちエディタ</title>
+<style>
+  :root{
+    --bg:#171224;
+    --panel:#221a33;
+    --panel2:#2b2142;
+    --line:#3a2e57;
+    --text:#ece6f7;
+    --dim:#9c8fbd;
+    --ame:#a78bfa;   /* amethyst */
+    --cit:#e8b84b;   /* citrine */
+    --grad:linear-gradient(120deg,#8b6cf0 0%,#a78bfa 42%,#d9a944 78%,#e8b84b 100%);
+    --danger:#f2795c;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+    height:100dvh;
+  }
+
+  /* ── header ── */
+  header{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 14px 9px;
+    background:var(--panel);
+    border-bottom:1px solid transparent;
+    border-image:var(--grad) 1;
+    flex:none;
+  }
+  .gem{
+    width:18px;height:18px;flex:none;
+    background:var(--grad);
+    transform:rotate(45deg);border-radius:4px;
+    box-shadow:0 0 10px rgba(167,139,250,.45);
+  }
+  .title{font-size:15px;font-weight:700;letter-spacing:.06em}
+  .title small{font-size:10px;color:var(--dim);font-weight:400;letter-spacing:.14em;margin-left:6px}
+  .spacer{flex:1}
+  .savebtn{
+    flex:none;font-size:12px;padding:7px 12px;border-radius:999px;
+    background:var(--grad);color:#1c1430;font-weight:700;
+  }
+  .savebtn.dirty{box-shadow:0 0 10px rgba(232,184,75,.55)}
+  .filebtn{
+    max-width:36vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    background:var(--panel2);border:1px solid var(--line);color:var(--cit);
+    font-size:12px;padding:7px 12px;border-radius:999px;
+    font-family:ui-monospace,Menlo,monospace;
+  }
+
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+  /* ── toolbar ── */
+  .toolbar{
+    display:flex;gap:6px;overflow-x:auto;flex:none;
+    padding:8px 10px;background:var(--panel);
+    border-bottom:1px solid var(--line);
+    scrollbar-width:none;
+  }
+  .toolbar::-webkit-scrollbar{display:none}
+  .chip{
+    flex:none;padding:9px 13px;border-radius:9px;
+    background:var(--panel2);border:1px solid var(--line);
+    color:var(--text);font-size:13px;
+    font-family:ui-monospace,Menlo,monospace;
+    min-height:40px;
+  }
+  .chip:active{background:#382b58;border-color:var(--ame)}
+  .chip.accent{color:var(--cit)}
+  .chip.add{color:var(--ame);border-style:dashed}
+
+  /* ── editor ── */
+  .editwrap{position:relative;flex:1;min-height:0;background:var(--panel)}
+  .backdrop,#editor{
+    position:absolute;inset:0;
+    font:16px/1.65 ui-monospace,Menlo,Consolas,"Courier New",monospace;
+    padding:12px 14px 40vh;
+    white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word;
+    letter-spacing:0;tab-size:2;
+  }
+  .backdrop{
+    overflow:hidden;color:transparent;pointer-events:none;
+  }
+  .backdrop .hs{color:rgba(167,139,250,.5)}
+  .backdrop .zs{
+    background:rgba(242,121,92,.32);
+    outline:1px dashed rgba(242,121,92,.7);
+    border-radius:3px;
+  }
+  #editor{
+    background:transparent;color:var(--text);border:none;outline:none;resize:none;
+    width:100%;height:100%;caret-color:var(--cit);
+    -webkit-text-size-adjust:100%;
+  }
+
+  /* ── footer ── */
+  footer{
+    flex:none;display:flex;align-items:center;gap:8px;
+    padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+    background:var(--panel);border-top:1px solid var(--line);
+  }
+  .count{font-size:11px;color:var(--dim);font-family:ui-monospace,monospace}
+  .zwarn{
+    font-size:11px;padding:5px 9px;border-radius:999px;
+    background:rgba(242,121,92,.15);color:var(--danger);
+    border:1px solid rgba(242,121,92,.5);display:none;
+  }
+  .zwarn.on{display:inline-block}
+  .fbtn{
+    padding:9px 13px;border-radius:9px;font-size:13px;
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  }
+  .fbtn.primary{background:var(--grad);color:#1c1430;font-weight:700;border:none}
+
+  /* ── overlays ── */
+  .overlay{
+    position:fixed;inset:0;background:rgba(12,8,22,.72);
+    display:none;z-index:30;backdrop-filter:blur(3px);
+  }
+  .overlay.on{display:flex;align-items:flex-end;justify-content:center}
+  .sheet{
+    background:var(--panel);width:100%;max-height:82dvh;overflow-y:auto;
+    border-radius:18px 18px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom));
+    border-top:2px solid;border-image:var(--grad) 1;
+  }
+  .sheet h2{font-size:14px;letter-spacing:.08em;margin-bottom:14px;color:var(--cit)}
+  .sheet label{display:block;font-size:11px;color:var(--dim);margin:12px 0 4px}
+  .sheet input{
+    width:100%;padding:11px 12px;border-radius:9px;font-size:16px;
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    font-family:ui-monospace,monospace;outline:none;
+  }
+  .sheet input:focus{border-color:var(--ame)}
+  .sheetrow{display:flex;gap:8px;margin-top:16px}
+  .sheetrow .fbtn{flex:1;padding:12px;text-align:center}
+
+  .filelist{display:flex;flex-direction:column;gap:8px}
+  .filerow{
+    display:flex;align-items:center;gap:8px;
+    background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:10px 12px;
+  }
+  .filerow.active{border-color:var(--ame)}
+  .filerow .fname{
+    flex:1;text-align:left;font-family:ui-monospace,monospace;font-size:14px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 0;
+  }
+  .filerow .mini{
+    flex:none;font-size:12px;color:var(--dim);padding:8px 9px;
+    border:1px solid var(--line);border-radius:8px;background:var(--panel);
+  }
+  .filerow .mini.del.arm{color:#fff;background:var(--danger);border-color:var(--danger)}
+
+  .sniprow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .sniprow .snipname{flex:1;font-family:ui-monospace,monospace;font-size:13px;color:var(--text)}
+
+  /* preview */
+  .pvwrap{position:fixed;inset:0;z-index:40;background:#fff;display:none;flex-direction:column}
+  .pvwrap.on{display:flex}
+  .pvbar{
+    flex:none;display:flex;align-items:center;gap:10px;
+    background:var(--panel);padding:9px 14px;color:var(--text);
+    border-bottom:2px solid;border-image:var(--grad) 1;
+  }
+  .pvbar span{font-size:13px;letter-spacing:.06em}
+  #pv{flex:1;border:none;width:100%;background:#fff}
+
+  /* toast */
+  .toast{
+    position:fixed;left:50%;bottom:90px;transform:translateX(-50%) translateY(12px);
+    background:var(--grad);color:#1c1430;font-size:13px;font-weight:700;
+    padding:10px 18px;border-radius:999px;opacity:0;pointer-events:none;
+    transition:.25s;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.4);white-space:nowrap;
+  }
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="gem"></div>
+  <div class="title">研磨台<small>LAPIDARY</small></div>
+  <div class="spacer"></div>
+  <button class="savebtn" id="saveBtn">💾 保存</button>
+  <button class="filebtn" id="fileBtn">index.html</button>
+</header>
+
+<div class="toolbar" id="toolbar"></div>
+
+<div class="editwrap">
+  <pre class="backdrop" id="backdrop" aria-hidden="true"></pre>
+  <textarea id="editor" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off"
+    placeholder="ここにHTMLを打っていく…上のタグボタンで挿入もできるよ"></textarea>
+</div>
+
+<footer>
+  <span class="count" id="count">0字</span>
+  <button class="zwarn" id="zwarn">全角スペース 0</button>
+  <div class="spacer" style="flex:1"></div>
+  <button class="fbtn" id="pvBtn">👁 表示</button>
+  <button class="fbtn primary" id="copyBtn">コピー</button>
+  <button class="fbtn" id="dlBtn">保存⬇</button>
+</footer>
+
+<!-- files -->
+<div class="overlay" id="filesOv">
+  <div class="sheet">
+    <h2>◆ ファイル</h2>
+    <div class="filelist" id="fileList"></div>
+    <label>新しいファイル名</label>
+    <input id="newFileName" placeholder="about.html">
+    <div class="sheetrow">
+      <button class="fbtn primary" id="newFileBtn">新規作成</button>
+      <button class="fbtn" data-close>閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- rename -->
+<div class="overlay" id="renameOv">
+  <div class="sheet">
+    <h2>◆ 名前を変更</h2>
+    <input id="renameInput">
+    <div class="sheetrow">
+      <button class="fbtn primary" id="renameOk">変更</button>
+      <button class="fbtn" data-close>キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- snippet -->
+<div class="overlay" id="snipOv">
+  <div class="sheet">
+    <h2>◆ マイタグを登録</h2>
+    <div id="snipList"></div>
+    <label>ボタン名</label>
+    <input id="snipLabel" placeholder="例: 蛍石カード">
+    <label>前に入れるタグ</label>
+    <input id="snipOpen" placeholder='例: &lt;div class="card"&gt;'>
+    <label>後ろに入れるタグ（省略OK）</label>
+    <input id="snipClose" placeholder="例: &lt;/div&gt;">
+    <div class="sheetrow">
+      <button class="fbtn primary" id="snipSave">登録する</button>
+      <button class="fbtn" data-close>閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- zenkaku cleanup -->
+<div class="overlay" id="zsOv">
+  <div class="sheet">
+    <h2>◆ 全角スペースの掃除</h2>
+    <p style="font-size:13px;color:var(--dim);line-height:1.7">
+      全角スペース（赤くマークされてる場所）はレイアウト崩れや文字化けの原因になりがち。まとめて置き換えられるよ。</p>
+    <div class="sheetrow">
+      <button class="fbtn primary" id="zsFix">半角2個に置換</button>
+      <button class="fbtn" id="zsDel">削除する</button>
+      <button class="fbtn" data-close>やめとく</button>
+    </div>
+  </div>
+</div>
+
+<!-- preview -->
+<div class="pvwrap" id="pvWrap">
+  <div class="pvbar">
+    <span>プレビュー</span>
+    <div class="spacer" style="flex:1"></div>
+    <button class="fbtn" id="pvClose">✕ 閉じる</button>
+  </div>
+  <iframe id="pv" sandbox="allow-same-origin"></iframe>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const editor = $('editor'), backdrop = $('backdrop');
+
+const TEMPLATE = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ページタイトル</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+</body>
+</html>`;
+
+/* ---------- state & storage ---------- */
+let state = null;
+const KEY = 'lapidary:state';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+function defaultState(){
+  return {
+    files:[{id:uid(), name:'index.html', content:TEMPLATE, updated:Date.now()}],
+    activeId:null, snippets:[]
+  };
+}
+async function loadState(){
+  try{
+    const r = await window.storage.get(KEY);
+    if(r && r.value){ state = JSON.parse(r.value); }
+  }catch(e){ /* first run */ }
+  if(!state || !state.files || !state.files.length) state = defaultState();
+  if(!state.files.find(f=>f.id===state.activeId)) state.activeId = state.files[0].id;
+}
+let saveTimer=null;
+async function doSave(manual){
+  try{
+    const r = await window.storage.set(KEY, JSON.stringify(state));
+    if(!r) throw new Error('storage returned null');
+    $('saveBtn').classList.remove('dirty');
+    if(manual) toast('保存したよ✨');
+  }catch(e){
+    console.error('save failed', e);
+    if(manual) toast('保存失敗…もう一回押してみて🙏');
+    else $('saveBtn').classList.add('dirty');
+  }
+}
+function save(now){
+  $('saveBtn').classList.add('dirty');
+  clearTimeout(saveTimer);
+  if(now) doSave(); else saveTimer=setTimeout(()=>doSave(), 700);
+}
+$('saveBtn').addEventListener('pointerdown', ev=>ev.preventDefault());
+$('saveBtn').addEventListener('click', ()=>{
+  clearTimeout(saveTimer);
+  doSave(true);
+});
+const activeFile = () => state.files.find(f=>f.id===state.activeId);
+
+/* ---------- toast ---------- */
+let toastTimer=null;
+function toast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('on'),1600);
+}
+
+/* ---------- backdrop (space viewer) ---------- */
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function renderBackdrop(){
+  let t = editor.value;
+  let html = esc(t)
+    .replace(/\u3000/g,'<span class="zs">\u3000</span>')
+    .replace(/ /g,'<span class="hs">·</span>');
+  if(t.endsWith('\n') || t==='') html += '\u200b';
+  backdrop.innerHTML = html;
+  syncScroll();
+  // counters
+  $('count').textContent = t.length + '字';
+  const z = (t.match(/\u3000/g)||[]).length;
+  const w = $('zwarn');
+  if(z>0){ w.textContent='⚠ 全角スペース '+z; w.classList.add('on'); }
+  else w.classList.remove('on');
+}
+function syncScroll(){
+  backdrop.scrollTop = editor.scrollTop;
+  backdrop.scrollLeft = editor.scrollLeft;
+}
+editor.addEventListener('scroll', syncScroll);
+editor.addEventListener('input', ()=>{
+  renderBackdrop();
+  const f = activeFile();
+  if(f){ f.content = editor.value; f.updated = Date.now(); save(); }
+});
+
+/* ---------- insertion ---------- */
+function insertTag(open, close){
+  editor.focus();
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const sel = editor.value.slice(s, e);
+  const text = open + sel + (close||'');
+  let ok=false;
+  try{ ok = document.execCommand('insertText', false, text); }catch(_){}
+  if(!ok){
+    editor.setRangeText(text, s, e, 'end');
+    editor.dispatchEvent(new Event('input'));
+  }
+  // caret placement
+  let pos;
+  if(close && sel.length===0) pos = s + open.length;        // 空なら中に
+  else if(close)              pos = s + text.length;         // 選択を包んだら後ろへ
+  else{
+    const mark = open.indexOf('""');                         // src="" 等の中へ
+    pos = mark >= 0 ? s + mark + 1 : s + open.length;
+  }
+  editor.setSelectionRange(pos, pos);
+  renderBackdrop();
+  const f = activeFile();
+  if(f){ f.content = editor.value; f.updated = Date.now(); save(); }
+}
+
+/* ---------- toolbar ---------- */
+const BASE_TAGS = [
+  {l:'<p>',      o:'<p>', c:'</p>'},
+  {l:'<br>',     o:'<br>\n'},
+  {l:'<a>',      o:'<a href="">', c:'</a>'},
+  {l:'<img>',    o:'<img src="" alt="">'},
+  {l:'<h2>',     o:'<h2>', c:'</h2>'},
+  {l:'<h3>',     o:'<h3>', c:'</h3>'},
+  {l:'<strong>', o:'<strong>', c:'</strong>'},
+  {l:'<ul><li>', o:'<ul>\n  <li>', c:'</li>\n</ul>'},
+  {l:'<li>',     o:'<li>', c:'</li>'},
+  {l:'<div>',    o:'<div class="">', c:'</div>'},
+  {l:'<span>',   o:'<span class="">', c:'</span>'},
+  {l:'コメント',  o:'<!-- ', c:' -->'},
+  {l:'␣␣ 字下げ', o:'  '},
+  {l:'雛形',      o:TEMPLATE, accent:true},
+];
+function renderToolbar(){
+  const tb = $('toolbar'); tb.innerHTML='';
+  const make = (t, custom) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (t.accent?' accent':'');
+    b.textContent = t.l;
+    b.addEventListener('click', ()=> insertTag(t.o, t.c));
+    // キーボードを閉じさせない
+    b.addEventListener('pointerdown', ev=>ev.preventDefault());
+    tb.appendChild(b);
+  };
+  BASE_TAGS.forEach(t=>make(t));
+  (state.snippets||[]).forEach(t=>make(t,true));
+  const add = document.createElement('button');
+  add.className='chip add'; add.textContent='＋マイタグ';
+  add.addEventListener('click', ()=>{ renderSnipList(); openOv('snipOv'); });
+  tb.appendChild(add);
+}
+
+/* ---------- overlays ---------- */
+function openOv(id){ $(id).classList.add('on'); }
+function closeOv(id){ $(id).classList.remove('on'); }
+document.querySelectorAll('[data-close]').forEach(b=>{
+  b.addEventListener('click', ()=> b.closest('.overlay').classList.remove('on'));
+});
+document.querySelectorAll('.overlay').forEach(ov=>{
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('on'); });
+});
+
+/* ---------- files ---------- */
+function openFile(id){
+  const f = state.files.find(x=>x.id===id);
+  if(!f) return;
+  state.activeId = id;
+  editor.value = f.content;
+  $('fileBtn').textContent = f.name;
+  renderBackdrop();
+  save(true);
+}
+function renderFileList(){
+  const list = $('fileList'); list.innerHTML='';
+  state.files.forEach(f=>{
+    const row = document.createElement('div');
+    row.className = 'filerow' + (f.id===state.activeId?' active':'');
+    const name = document.createElement('button');
+    name.className='fname'; name.textContent = f.name;
+    name.addEventListener('click', ()=>{ openFile(f.id); closeOv('filesOv'); });
+    const ren = document.createElement('button');
+    ren.className='mini'; ren.textContent='✎';
+    ren.addEventListener('click', ()=>{
+      renameTarget = f.id;
+      $('renameInput').value = f.name;
+      closeOv('filesOv'); openOv('renameOv');
+    });
+    const del = document.createElement('button');
+    del.className='mini del'; del.textContent='🗑';
+    del.addEventListener('click', ()=>{
+      if(!del.classList.contains('arm')){
+        del.classList.add('arm'); del.textContent='本当に?';
+        setTimeout(()=>{del.classList.remove('arm');del.textContent='🗑';},2200);
+        return;
+      }
+      state.files = state.files.filter(x=>x.id!==f.id);
+      if(!state.files.length) state.files=[{id:uid(),name:'index.html',content:TEMPLATE,updated:Date.now()}];
+      if(state.activeId===f.id) openFile(state.files[0].id);
+      renderFileList(); save(true);
+      toast('削除したよ');
+    });
+    row.append(name, ren, del);
+    list.appendChild(row);
+  });
+}
+let renameTarget=null;
+$('renameOk').addEventListener('click', ()=>{
+  const f = state.files.find(x=>x.id===renameTarget);
+  const v = $('renameInput').value.trim();
+  if(f && v){ f.name=v; if(f.id===state.activeId) $('fileBtn').textContent=v; save(true); }
+  closeOv('renameOv'); renderFileList(); openOv('filesOv');
+});
+$('fileBtn').addEventListener('click', ()=>{ renderFileList(); openOv('filesOv'); });
+$('newFileBtn').addEventListener('click', ()=>{
+  let v = $('newFileName').value.trim() || 'page.html';
+  if(!/\./.test(v)) v += '.html';
+  const f = {id:uid(), name:v, content: v.endsWith('.css')?'':TEMPLATE, updated:Date.now()};
+  state.files.push(f);
+  $('newFileName').value='';
+  openFile(f.id); renderFileList(); save(true);
+  closeOv('filesOv');
+  toast(v+' を作ったよ✨');
+});
+
+/* ---------- snippets ---------- */
+function renderSnipList(){
+  const box = $('snipList'); box.innerHTML='';
+  if(!(state.snippets||[]).length) return;
+  state.snippets.forEach((s,i)=>{
+    const row = document.createElement('div'); row.className='sniprow';
+    const nm = document.createElement('span'); nm.className='snipname'; nm.textContent='◆ '+s.l;
+    const del = document.createElement('button'); del.className='mini'; del.textContent='削除';
+    del.style.cssText='font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--panel2)';
+    del.addEventListener('click', ()=>{ state.snippets.splice(i,1); save(true); renderSnipList(); renderToolbar(); });
+    row.append(nm, del); box.appendChild(row);
+  });
+}
+$('snipSave').addEventListener('click', ()=>{
+  const l = $('snipLabel').value.trim();
+  const o = $('snipOpen').value;
+  const c = $('snipClose').value;
+  if(!l || !o){ toast('ボタン名と前タグは必須だよ'); return; }
+  state.snippets = state.snippets||[];
+  state.snippets.push({l, o, c: c||undefined});
+  $('snipLabel').value=$('snipOpen').value=$('snipClose').value='';
+  save(true); renderToolbar(); renderSnipList();
+  toast('マイタグ登録OK✨');
+});
+
+/* ---------- zenkaku cleanup ---------- */
+$('zwarn').addEventListener('click', ()=> openOv('zsOv'));
+function zsReplace(rep){
+  editor.value = editor.value.replace(/\u3000/g, rep);
+  const f = activeFile();
+  if(f){ f.content=editor.value; f.updated=Date.now(); }
+  renderBackdrop(); save(true); closeOv('zsOv');
+  toast('全角スペースを掃除したよ✨');
+}
+$('zsFix').addEventListener('click', ()=> zsReplace('  '));
+$('zsDel').addEventListener('click', ()=> zsReplace(''));
+
+/* ---------- preview / copy / download ---------- */
+$('pvBtn').addEventListener('click', ()=>{
+  $('pv').srcdoc = editor.value;
+  $('pvWrap').classList.add('on');
+});
+$('pvClose').addEventListener('click', ()=> $('pvWrap').classList.remove('on'));
+
+$('copyBtn').addEventListener('click', async ()=>{
+  try{
+    await navigator.clipboard.writeText(editor.value);
+    toast('全文コピーしたよ✨');
+  }catch(e){
+    editor.focus(); editor.select();
+    try{ document.execCommand('copy'); toast('全文コピーしたよ✨'); }
+    catch(_){ toast('コピーできなかった…長押しで選択してね'); }
+  }
+});
+
+$('dlBtn').addEventListener('click', ()=>{
+  const f = activeFile();
+  const blob = new Blob([editor.value], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = f ? f.name : 'page.html';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  toast('ダウンロード開始⬇');
+});
+
+/* ---------- init ---------- */
+(async ()=>{
+  await loadState();
+  renderToolbar();
+  openFile(state.activeId);
+})();
+</script>
+</body>
+</html>
