@@ -63,7 +63,7 @@
   .toolbar{
     display:flex;gap:6px;overflow-x:auto;flex:none;
     padding:8px 10px;background:var(--panel);
-    border-bottom:1px solid var(--line);
+    border-top:1px solid var(--line);
     scrollbar-width:none;
   }
   .toolbar::-webkit-scrollbar{display:none}
@@ -198,13 +198,13 @@
   ⚠ この環境ではブラウザ保存が使えないみたい（プライベートブラウズ中？ または 設定&gt;Safari&gt;「すべてのCookieをブロック」がオン？）。タブを閉じるとデータが消えるので、こまめに<b>コピー/DL</b>してね。
 </div>
 
-<div class="toolbar" id="toolbar"></div>
-
 <div class="editwrap">
   <pre class="backdrop" id="backdrop" aria-hidden="true"></pre>
   <textarea id="editor" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off"
     placeholder="ここにHTMLを打っていく…上のタグボタンで挿入もできるよ"></textarea>
 </div>
+
+<div class="toolbar" id="toolbar"></div>
 
 <footer>
   <span class="count" id="count">0字</span>
@@ -632,6 +632,28 @@ $('dlBtn').addEventListener('click', ()=>{
   setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
   toast('ダウンロード開始⬇');
 });
+
+/* ---------- キーボード追従 (iOS Safari対策) ----------
+   iOSはキーボードが出てもレイアウトを縮めず画面ごと押し上げるので、
+   visualViewportで「見えている範囲」にアプリ全体をフィットさせる。
+   これでタグバーが常にキーボードの真上に浮く */
+const vv = window.visualViewport;
+if(vv){
+  let raf = null;
+  const fit = ()=>{
+    if(raf) return;
+    raf = requestAnimationFrame(()=>{
+      raf = null;
+      document.body.style.height = vv.height + 'px';
+      document.body.style.transform = 'translateY(' + vv.offsetTop + 'px)';
+      window.scrollTo(0, 0);
+    });
+  };
+  vv.addEventListener('resize', fit);
+  vv.addEventListener('scroll', fit);
+  editor.addEventListener('focus', ()=>setTimeout(fit, 300));
+  editor.addEventListener('blur',  ()=>setTimeout(fit, 300));
+}
 
 /* ---------- init ---------- */
 (async ()=>{
